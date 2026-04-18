@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/compute
+        working-directory: .
 
     env:
       TF_CLOUD_ORGANIZATION: Cybserve
@@ -35,7 +35,7 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Terraform init
-        run: terraform init
+        run: terraform -chdir=terraform/compute init
 
       - name: Terraform apply
-        run: terraform apply -auto-approve -input=false
+        run: terraform -chdir=terraform/compute apply -auto-approve -input=false
