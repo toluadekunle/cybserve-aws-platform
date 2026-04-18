@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/shared
+        working-directory: .
 
     env:
       TF_CLOUD_ORGANIZATION: Cybserve
@@ -42,18 +42,18 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Terraform fmt
-        run: terraform fmt -check -recursive ..
+        run: terraform -chdir=terraform/shared fmt -check -recursive .
         continue-on-error: true
 
       - name: Terraform init
-        run: terraform init
+        run: terraform -chdir=terraform/shared init
 
       - name: Terraform validate
-        run: terraform validate
+        run: terraform -chdir=terraform/shared validate
 
       - name: Terraform plan
         id: plan
-        run: terraform plan -no-color -input=false
+        run: terraform -chdir=terraform/shared plan -no-color -input=false
         continue-on-error: true
 
       - name: Comment plan on PR
