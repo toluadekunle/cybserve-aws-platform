@@ -1,0 +1,88 @@
+name: Terraform Plan (shared)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/shared/**'
+      - 'terraform/modules/vpc/**'
+      - 'terraform/modules/security/**'
+      - 'terraform/modules/rds/**'
+      - '.github/workflows/terraform-plan-shared.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    name: Plan (shared)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/shared
+
+    env:
+      TF_CLOUD_ORGANIZATION: Cybserve
+      TF_WORKSPACE: ha-3tier-shared-prod
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python (for Lambda build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive ..
+        continue-on-error: true
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        id: plan
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan (shared) 🏗️ \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show plan</summary>
+
+            \`\`\`\n
+            ${process.env.PLAN}
+            \`\`\`
+
+            </details>
+
+            *Workspace: \`ha-3tier-shared-prod\` — review RDS / Secrets / DNS changes carefully*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Plan status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

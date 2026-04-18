@@ -1,0 +1,92 @@
+name: Deploy Application
+
+# Triggered on changes to app code. Rebuilds the app AMI
+# via Packer, commits the new AMI ID back to
+# terraform/compute/terraform.tfvars with [skip ci], then
+# applies the compute workspace to roll out a refresh.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'packer/app-ami.pkr.hcl'
+      - '.github/workflows/deploy-app.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    name: Build AMI + Apply compute
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: eu-west-2
+      TF_CLOUD_ORGANIZATION: Cybserve
+      TF_WORKSPACE: ha-3tier-compute-prod
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: 1.15.1
+
+      - name: Packer init
+        working-directory: packer
+        run: packer init app-ami.pkr.hcl
+
+      - name: Packer build
+        working-directory: packer
+        run: |
+          packer build \
+            -var "aws_region=${AWS_REGION}" \
+            app-ami.pkr.hcl
+
+      - name: Extract AMI ID from manifest
+        id: ami
+        working-directory: packer
+        run: |
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d':' -f2)
+          echo "Built AMI: $AMI_ID"
+          echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
+
+      - name: Update compute tfvars with new AMI ID
+        run: |
+          sed -i "s|^app_ami_id.*|app_ami_id = \"${{ steps.ami.outputs.ami_id }}\"|" terraform/compute/terraform.tfvars
+          grep '^app_ami_id' terraform/compute/terraform.tfvars
+
+      - name: Commit AMI update
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add terraform/compute/terraform.tfvars
+          git diff --cached --quiet || \
+            git commit -m "ci: pin app AMI to ${{ steps.ami.outputs.ami_id }} [skip ci]"
+          git push origin main
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        working-directory: terraform/compute
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: terraform/compute
+        run: terraform apply -auto-approve -input=false

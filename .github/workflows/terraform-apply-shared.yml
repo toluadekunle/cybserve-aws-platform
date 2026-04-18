@@ -1,0 +1,58 @@
+name: Terraform Apply (shared)
+
+# Shared changes affect VPC, RDS, secrets, DNS, and the
+# Lambda bootstrap. These are high-blast-radius. We require
+# manual approval via environment protection before apply.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/shared/**'
+      - 'terraform/modules/vpc/**'
+      - 'terraform/modules/security/**'
+      - 'terraform/modules/rds/**'
+      - '.github/workflows/terraform-apply-shared.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Apply (shared)
+    runs-on: ubuntu-latest
+
+    # Configure an environment named "shared-prod" in the
+    # repo's Environments settings with required reviewers.
+    # This forces a human approval click before apply runs.
+    environment: shared-prod
+
+    defaults:
+      run:
+        working-directory: terraform/shared
+
+    env:
+      TF_CLOUD_ORGANIZATION: Cybserve
+      TF_WORKSPACE: ha-3tier-shared-prod
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python (for Lambda build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false

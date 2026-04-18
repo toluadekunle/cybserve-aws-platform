@@ -1,0 +1,41 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/compute/**'
+      - 'terraform/modules/**'
+      - 'scripts/**'
+      - '.github/workflows/terraform-apply.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Apply (compute)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/compute
+
+    env:
+      TF_CLOUD_ORGANIZATION: Cybserve
+      TF_WORKSPACE: ha-3tier-compute-prod
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false
