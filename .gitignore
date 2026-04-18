@@ -1,0 +1,40 @@
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+crash.log
+
+# Lambda build artifacts
+terraform/shared/lambda/*/build/
+terraform/shared/lambda/*/build.zip
+terraform/shared/lambda/*/__pycache__/
+
+# Backup files
+*.pre-v3
+*.backup
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets — these should never be here, but belt and braces
+*.pem
+*.key
+credentials
+.env
+.envrc
