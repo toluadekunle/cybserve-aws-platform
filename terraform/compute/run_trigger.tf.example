@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────
+# Optional: codified run trigger (shared → compute)
+#
+# This file is intentionally named .tf.example so Terraform
+# does NOT read it. Enable by either:
+#   (a) renaming to run_trigger.tf, OR
+#   (b) clicking the trigger in the HCP UI (see REFACTOR.md
+#       "Run trigger setup")
+#
+# Prerequisites to enable this file:
+#   1. A TFE_TOKEN with read access to the compute workspace
+#      configured in the compute workspace's env vars (HCP
+#      UI → compute workspace → Variables → Environment).
+#      The token must belong to a user with "Manage
+#      Workspaces" on the compute workspace.
+#   2. Add the tfe provider block below to cloud.tf, or keep
+#      it isolated here — both work.
+#
+# Behaviour when enabled:
+#   When shared-prod applies successfully, HCP queues a
+#   plan on compute-prod automatically. Compute is not
+#   applied unless you've set auto_apply_run_trigger = true
+#   on it (or approve the queued run manually).
+#
+# The UI-click alternative achieves the identical effect
+# and requires no provider auth. Use this file only if you
+# want the trigger itself under version control.
+# ─────────────────────────────────────────────────────────
+
+# Uncomment if keeping this in a separate file from cloud.tf:
+#
+# terraform {
+#   required_providers {
+#     tfe = {
+#       source  = "hashicorp/tfe"
+#       version = "~> 0.55"
+#     }
+#   }
+# }
+
+# Provider auth comes from TFE_TOKEN env var in the workspace.
+#
+# provider "tfe" {}
+
+data "tfe_workspace" "self" {
+  name         = "ha-3tier-compute-prod"
+  organization = var.shared_organization
+}
+
+data "tfe_workspace" "shared" {
+  name         = var.shared_workspace_name
+  organization = var.shared_organization
+}
+
+resource "tfe_run_trigger" "shared_to_compute" {
+  workspace_id  = data.tfe_workspace.self.id
+  sourceable_id = data.tfe_workspace.shared.id
+}
