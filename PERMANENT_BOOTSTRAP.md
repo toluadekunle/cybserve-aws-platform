@@ -72,41 +72,119 @@ If you want the 8 NS delegation records managed by Terraform instead of clicked 
 
 ## Stage 2 — HCP organization + workspace setup
 
-### 2.1 HCP organization
+Five workspaces across three projects. Every setting matters — mistakes here cause the hardest-to-debug problems later (wrong working directory swallows `.tfvars` silently; wrong env-var type leaks secrets into plan output; auto-apply-on means a rushed merge becomes a prod apply).
 
-You already have `Cybserve`. Confirm you're the owner.
+Do not skip the "Do NOT" callouts at the end of this stage.
 
-### 2.2 Create the HCP project structure
+### 2.1 Confirm org ownership
 
-HCP Console → Projects → Create.
+Sign in at https://app.terraform.io. Top-left account switcher → select `Cybserve`. Top-right avatar → Organization Settings → you should see yourself listed with role `Owner`. If not, fix before continuing.
 
-Create three projects:
-- `ha-3tier-prod`
-- `ha-3tier-staging`
-- `ha-3tier-meta`
+### 2.2 Create the three projects
 
-RBAC: keep yourself as admin for now. Multi-user RBAC is a Phase 5 concern.
+Left sidebar → "Projects and workspaces" (default view).
 
-### 2.3 Create the permanent workspace
+For each of the three projects below:
 
-HCP Console → Workspaces → New workspace.
+1. Click the **"New"** button (top-right) → **"Project"**
+2. Name: (from table)
+3. Description: (from table — matters for future operators scanning the list)
+4. Click **"Create"**
 
-- Name: `ha-3tier-permanent-prod`
-- Project: `ha-3tier-prod`
-- Workflow: CLI-driven (we'll switch to VCS-driven after bootstrap — see Stage 6)
-- Terraform version: latest >= 1.6
+| Name | Description |
+|---|---|
+| `ha-3tier-prod` | Production environment — burst + permanent workspaces |
+| `ha-3tier-staging` | Staging environment — burst workspaces |
+| `ha-3tier-meta` | Governance — codified HCP + GitHub config (Phase 2+) |
 
-Leave it alone for now. Don't queue any runs yet.
+**Verify:** the left sidebar project dropdown now shows all three.
 
-### 2.4 Create the other workspace placeholders
+### 2.3 Create the five workspaces
 
-Create (empty, no runs):
-- `ha-3tier-shared-prod` — project `ha-3tier-prod`
-- `ha-3tier-compute-prod` — project `ha-3tier-prod`
-- `ha-3tier-shared-staging` — project `ha-3tier-staging`
-- `ha-3tier-compute-staging` — project `ha-3tier-staging`
+All five follow the same creation flow. Steps below are for the first one; repeat the pattern 4 more times.
 
-These exist so their names appear in our `hcp_workspaces` variable. They'll start doing work in Phase 2.
+#### 2.3.a — Create `ha-3tier-permanent-prod`
+
+1. Top-right **"New"** → **"Workspace"**
+
+2. **Choose a workflow:** click **"CLI-driven workflow"**
+   - ⚠️ NOT "Version control workflow" — we switch to VCS only in Stage 6, after OIDC is wired up. Starting VCS-driven creates a chicken-and-egg we'd have to unwind.
+
+3. **Configure settings:**
+   - **Project**: `ha-3tier-prod` (dropdown)
+   - **Workspace Name**: `ha-3tier-permanent-prod`
+   - **Description**: `Permanent layer — OIDC, IAM, KMS, audit stack, Private CA, Route53 zones. Never destroyed.`
+
+4. Click **"Create workspace"**
+
+5. You land on the workspace's overview page. **Do not queue a plan.** The workspace has no config loaded yet.
+
+#### 2.3.b — Configure workspace settings (critical)
+
+On the new workspace page, navigate:
+
+- Top nav **Settings** → **General**
+
+Set each field to **exactly** this (defaults are usually right, but verify):
+
+| Field | Value | Why |
+|---|---|---|
+| **Execution Mode** | `Remote` | HCP runs Terraform on their runners. State lives in HCP. This is what "Remote" means in HCP Terraform — unrelated to CLI-driven vs VCS-driven. |
+| **Apply Method** | `Manual apply` (not "Auto apply") | Every apply requires a human click. Non-negotiable for our defensibility bar. |
+| **Terraform Working Directory** | **LEAVE BLANK** | This field only applies to VCS-driven runs. We're CLI-driven — the working directory comes from the `-chdir` flag on the command line. Setting it here now causes confusing behaviour during Stage 4. We'll set it to `terraform/permanent` in Stage 6 when we switch to VCS. |
+| **Terraform Version** | **Pin to a specific version**, e.g. `1.9.8` | NOT "latest". Latest moves; plans that worked last week fail after a silent upgrade. Pinned version = reproducible applies. The repo's `required_version` allows `>= 1.6.0`, so any recent version works — pick the current stable and write it down. |
+| **User Interface** | `Structured Run Output` (default) | Better visual diff reading |
+
+Click **"Save settings"**.
+
+Do **not** touch these other tabs yet:
+- **Variables** — Stage 4 and 5 manage these with exact values
+- **Version Control** — Stage 6 connects this
+- **Notifications** — later, optional
+- **Run Triggers** — Phase 2 uses this for shared → compute
+- **Team Access** — RBAC is Phase 5+, defaults fine for sole operator
+
+#### 2.3.c — Repeat for the four burst workspaces
+
+Same flow as 2.3.a + 2.3.b, four times:
+
+| Workspace Name | Project | Description |
+|---|---|---|
+| `ha-3tier-shared-prod` | `ha-3tier-prod` | Prod burst: VPC, Aurora, secrets, internal ACM |
+| `ha-3tier-compute-prod` | `ha-3tier-prod` | Prod burst: ALBs, ASGs, WAF, route53 alias |
+| `ha-3tier-shared-staging` | `ha-3tier-staging` | Staging burst: VPC, Aurora, secrets |
+| `ha-3tier-compute-staging` | `ha-3tier-staging` | Staging burst: ALBs, ASGs, WAF |
+
+Every one of them: **CLI-driven workflow, Remote execution, Manual apply, Working Directory blank, Terraform version pinned to the same value as permanent, no variables.**
+
+These stay empty (no config, no runs) until Phase 2 drops Terraform files into `terraform/shared` and `terraform/compute`.
+
+### 2.4 Verification
+
+Go to `https://app.terraform.io/app/Cybserve/workspaces`. The filter UI should show:
+
+- 5 workspaces total
+- 3 in project `ha-3tier-prod` (permanent, shared-prod, compute-prod)
+- 2 in project `ha-3tier-staging` (shared-staging, compute-staging)
+- 0 in project `ha-3tier-meta` (correct — it's for Phase 2)
+- Every workspace shows "No runs" or similar
+- Every workspace shows "CLI-Driven Workflow" as the trigger type
+- Every workspace shows the same pinned Terraform version
+
+If any of these don't match, fix now — much cheaper than debugging after Stage 4.
+
+### 2.5 Do NOT do any of these yet (common mistakes)
+
+Past problems from real setups:
+
+- ❌ **Do NOT add any Workspace Variables** (neither "Terraform variables" nor "Environment variables"). Stage 4 adds temporary AWS creds as Environment variables with specific names + sensitivity flags; Stage 5 replaces them with OIDC config. Adding them now either duplicates work or contradicts it.
+- ❌ **Do NOT connect the workspace to GitHub.** Stage 6 does the permanent workspace; Phase 2 does the others. Connecting now triggers VCS behaviour that conflicts with CLI-driven.
+- ❌ **Do NOT set a Terraform Working Directory.** CLI-driven doesn't need it; VCS-driven sets it in Stage 6. Setting it now causes HCP to look in a path that doesn't match your `-chdir` flag — you'll get "no Terraform configuration files" errors that are hard to diagnose.
+- ❌ **Do NOT enable Auto Apply on any workspace, ever.** Our defensibility bar is "a human approves every apply." Auto Apply silently overrides that.
+- ❌ **Do NOT queue a plan on any workspace yet.** Permanent has no config (we run it from CLI in Stage 4). The other 4 will remain empty until Phase 2.
+- ❌ **Do NOT put AWS credentials as "Terraform variables".** They belong as "Environment variables" with **Sensitive** checked. Terraform variables render in plan output — a sensitive one leaks into logs.
+- ❌ **Do NOT delete and recreate a workspace if you fumble a setting.** Every field is editable post-creation. Deleting wastes time and, for workspaces with state, is destructive.
+- ❌ **Do NOT use the "latest" Terraform version.** Pin it. Changing the pin is a deliberate act; letting it drift is how Tuesday-morning runs start breaking for no reason.
 
 ---
 
