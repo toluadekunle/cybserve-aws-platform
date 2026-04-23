@@ -28,22 +28,45 @@ Check that IAM OIDC providers quota is at least 2 (default is 100, should be fin
 
 ---
 
-## Stage 1 — DNS delegation (one-time, at whichever registrar holds cybserve.io)
+## Stage 1 — DNS delegation at Cloudflare
 
-**No domain transfer is required for Phase 1.** What we need is NS delegation for two subdomains of `cybserve.io`, set once at wherever that parent domain is registered. After that, the registrar is never touched again during any demo cycle — the hosted zones live in the permanent layer and persist across destroy/rebuild.
+**Target state:** registrar at Cloudflare, DNS at Cloudflare, subdomain hosted zones at Route 53 (Terraform-managed). This decouples domain identity (Cloudflare) from workload hosting (AWS), which is a specific point a production-grade security reviewer looks for.
 
-After Stage 4 (first apply) you'll have outputs `route53_prod_name_servers` and `route53_staging_name_servers` — four nameservers each. At that point:
+Two independent migrations:
 
-1. Log in to the DNS manager for `cybserve.io` (wherever it's registered — Route 53, Namecheap, Cloudflare, etc.).
+**1a. DNS migration (do this before Stage 4's first apply — 30 min active work, hours to propagate)**
+
+1. Sign up at Cloudflare if you don't have an account. Enable hardware-key or TOTP 2FA **immediately** on the account. Store recovery codes in the same physical safe as AWS root recovery codes.
+2. Cloudflare dashboard → Add a Site → `cybserve.io` → Free plan.
+3. Review Cloudflare's DNS import. Delete any GoDaddy parking records. Leave apex empty unless you have active apex use (email MX, www redirect).
+4. Cloudflare gives you two nameservers (e.g. `chad.ns.cloudflare.com`, `fay.ns.cloudflare.com`). Note them.
+5. GoDaddy → `cybserve.io` → DNS → Nameservers → "Enter my own nameservers" → paste the Cloudflare pair. Save.
+6. Verify: `dig NS cybserve.io +short` should return the Cloudflare nameservers. 5–30 min typical.
+
+**1b. NS delegation after Stage 4 (5 min at Cloudflare)**
+
+After the first apply emits `route53_prod_name_servers` and `route53_staging_name_servers`:
+
+1. Cloudflare dashboard → `cybserve.io` → DNS → Records.
 2. Add 4 NS records for host `app`, each pointing at one of the prod zone nameservers.
 3. Add 4 NS records for host `app-staging`, each pointing at one of the staging zone nameservers.
-4. Propagation takes 5–10 minutes. Verify with `dig NS app.cybserve.io`.
+4. Verify: `dig NS app.cybserve.io +short` should return the Route 53 prod nameservers.
 
-**That is the only registrar touch, ever.** Destroying and rebuilding burst layers does not rotate the permanent-layer zone NS records, so these 8 entries stay valid forever.
+**That is the only touch of the Cloudflare DNS panel, ever.** Destroying and rebuilding burst layers does not rotate permanent-layer zone NS records.
 
-### If `cybserve.io` is already at Route 53
+**1c. Registrar transfer (non-blocking, 5–7 days, do anytime)**
 
-Even better — in that case the NS delegation records are Terraform-manageable too. Add a small block to `dns.tf` that writes the delegation records into the existing apex hosted zone (via `data.aws_route53_zone.apex` + `aws_route53_record.app_ns` + `aws_route53_record.staging_ns`). Zero registrar clicks, 100% codified. Tell me which registrar and I'll add that block.
+The transfer can run in parallel with Phase 1 apply — DNS stays at Cloudflare throughout.
+
+1. GoDaddy: unlock `cybserve.io`, disable WHOIS privacy, request authorization code. Verify registrant email is current.
+2. Cloudflare → Domain Registration → Transfer Domains → enter `cybserve.io` + auth code. Pay one year's renewal (~£11 for `.io` at-cost).
+3. Approve the GoDaddy confirmation email promptly (skips the 5-day ICANN auto-approve).
+4. Cloudflare emails when complete.
+5. Post-transfer: verify auto-renew, WHOIS privacy, and transfer lock are ON (all default). Remove payment method at GoDaddy.
+
+### Follow-up — optionally codify NS delegation via the `cloudflare` Terraform provider
+
+If you want the 8 NS delegation records managed by Terraform instead of clicked in, we can add a small Cloudflare-provider block to `dns.tf` later. Requires a Cloudflare API token scoped to Zone:DNS:Edit for `cybserve.io`. Deferred — it's a small quality-of-life improvement, not a security control.
 
 ---
 
