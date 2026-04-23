@@ -1,0 +1,12 @@
+project_name              = "ha-3tier"
+aws_region                = "eu-west-2"
+owner_email               = "tolu@cybserve.co.uk"
+github_org                = "toluadekunle"
+github_platform_repo      = "cybserve-aws-platform"
+github_app_repo           = "cybserve-ha3-app"
+hcp_organization          = "Cybserve"
+parent_domain             = "cybserve.io"
+primary_domain            = "app.cybserve.io"
+staging_domain            = "app-staging.cybserve.io"
+audit_log_retention_years = 1
+private_ca_common_name    = "cybserve-ha3-internal-ca"
