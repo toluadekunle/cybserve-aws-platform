@@ -9,47 +9,19 @@
 
 ########################################
 # GuardDuty
+#
+# Detector + per-feature toggles. AWS deprecated the
+# `datasources` block on aws_guardduty_detector in favour
+# of the aws_guardduty_detector_feature resource — this
+# file uses the new form exclusively. Adding the deprecated
+# block back would fight with the feature resources.
 ########################################
 resource "aws_guardduty_detector" "main" {
   enable = true
 
-  datasources {
-    s3_logs {
-      enable = true
-    }
-    kubernetes {
-      audit_logs {
-        enable = false # No EKS in this stack
-      }
-    }
-    malware_protection {
-      scan_ec2_instance_with_findings {
-        ebs_volumes {
-          enable = true
-        }
-      }
-    }
-  }
-
   finding_publishing_frequency = "FIFTEEN_MINUTES"
 
   tags = { Name = "${var.project_name}-guardduty" }
-}
-
-# GuardDuty has additional "feature"-based data sources that
-# are enabled via a separate resource in newer provider
-# versions. Wire RDS protection, Lambda protection, and
-# EKS runtime monitoring (off since no EKS).
-resource "aws_guardduty_detector_feature" "rds_protection" {
-  detector_id = aws_guardduty_detector.main.id
-  name        = "RDS_LOGIN_EVENTS"
-  status      = "ENABLED"
-}
-
-resource "aws_guardduty_detector_feature" "lambda_protection" {
-  detector_id = aws_guardduty_detector.main.id
-  name        = "LAMBDA_NETWORK_LOGS"
-  status      = "ENABLED"
 }
 
 resource "aws_guardduty_detector_feature" "s3_data_events" {
@@ -61,6 +33,18 @@ resource "aws_guardduty_detector_feature" "s3_data_events" {
 resource "aws_guardduty_detector_feature" "ebs_malware" {
   detector_id = aws_guardduty_detector.main.id
   name        = "EBS_MALWARE_PROTECTION"
+  status      = "ENABLED"
+}
+
+resource "aws_guardduty_detector_feature" "rds_protection" {
+  detector_id = aws_guardduty_detector.main.id
+  name        = "RDS_LOGIN_EVENTS"
+  status      = "ENABLED"
+}
+
+resource "aws_guardduty_detector_feature" "lambda_protection" {
+  detector_id = aws_guardduty_detector.main.id
+  name        = "LAMBDA_NETWORK_LOGS"
   status      = "ENABLED"
 }
 

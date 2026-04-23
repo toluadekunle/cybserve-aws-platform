@@ -54,16 +54,22 @@ variable "hcp_workspaces" {
   }
 }
 
-variable "primary_domain" {
-  description = "Public domain for the prod app — Route53 hosted zone is created here"
+variable "parent_domain" {
+  description = "Parent domain at whichever registrar holds cybserve.io — we never directly manage this, but it's where the NS delegation records for the subdomain zones below must be set (once)"
   type        = string
-  default     = "app.cybserve.co.uk"
+  default     = "cybserve.io"
+}
+
+variable "primary_domain" {
+  description = "Public domain for the prod app — Route53 hosted zone is created for this FQDN"
+  type        = string
+  default     = "app.cybserve.io"
 }
 
 variable "staging_domain" {
   description = "Public domain for the staging app"
   type        = string
-  default     = "app-staging.cybserve.co.uk"
+  default     = "app-staging.cybserve.io"
 }
 
 variable "audit_log_retention_years" {

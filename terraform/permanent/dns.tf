@@ -2,7 +2,7 @@
 # Route53 hosted zones + public ACM certificates
 #
 # Both zones live in the permanent layer so NS delegation
-# from the parent domain (cybserve.co.uk) is a one-time
+# from the parent domain (cybserve.io) is a one-time
 # configuration. Destroying and rebuilding burst layers
 # does NOT rotate NS records.
 #
@@ -17,7 +17,7 @@
 ########################################
 resource "aws_route53_zone" "prod" {
   name    = var.primary_domain
-  comment = "${var.project_name} prod — delegated from cybserve.co.uk"
+  comment = "${var.project_name} prod — delegated from ${var.parent_domain}"
 
   tags = { Name = "${var.project_name}-prod-zone" }
 }
@@ -27,7 +27,7 @@ resource "aws_route53_zone" "prod" {
 ########################################
 resource "aws_route53_zone" "staging" {
   name    = var.staging_domain
-  comment = "${var.project_name} staging — delegated from cybserve.co.uk"
+  comment = "${var.project_name} staging — delegated from ${var.parent_domain}"
 
   tags = { Name = "${var.project_name}-staging-zone" }
 }

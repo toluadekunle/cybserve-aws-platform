@@ -2,7 +2,7 @@
 
 This document lists everything a human has to do outside of `terraform apply` to bring the permanent layer online. You do this once, in the order given. After it's done, the permanent layer is self-managing via HCP + OIDC — you never repeat these steps.
 
-Estimated elapsed time: **~90 minutes active work + 7 days GoDaddy transfer (runs in background)**.
+Estimated elapsed time: **~90 minutes active work**. (Optional domain transfer is a 7-day background task and is not required.)
 
 ---
 
@@ -28,19 +28,22 @@ Check that IAM OIDC providers quota is at least 2 (default is 100, should be fin
 
 ---
 
-## Stage 1 — GoDaddy → Route53 domain transfer (runs in background for a week)
+## Stage 1 — DNS delegation (one-time, at whichever registrar holds cybserve.io)
 
-Start this now so it completes while you're doing Stages 2–5.
+**No domain transfer is required for Phase 1.** What we need is NS delegation for two subdomains of `cybserve.io`, set once at wherever that parent domain is registered. After that, the registrar is never touched again during any demo cycle — the hosted zones live in the permanent layer and persist across destroy/rebuild.
 
-1. AWS Console → Route 53 → Registered domains → Transfer in.
-2. Enter `cybserve.co.uk`.
-3. GoDaddy side: disable privacy protection, unlock the domain, request the authorization code. Enter it in the Route 53 transfer form.
-4. AWS emails the registered contact for approval. Approve.
-5. Wait 5–7 days. You'll get a confirmation email when done.
+After Stage 4 (first apply) you'll have outputs `route53_prod_name_servers` and `route53_staging_name_servers` — four nameservers each. At that point:
 
-During this window the existing `app.cybserve.co.uk` NS delegation at GoDaddy keeps working. After transfer, the NS delegation lives in Route 53 alongside the zones we're about to create — fully Terraform-managed end-to-end.
+1. Log in to the DNS manager for `cybserve.io` (wherever it's registered — Route 53, Namecheap, Cloudflare, etc.).
+2. Add 4 NS records for host `app`, each pointing at one of the prod zone nameservers.
+3. Add 4 NS records for host `app-staging`, each pointing at one of the staging zone nameservers.
+4. Propagation takes 5–10 minutes. Verify with `dig NS app.cybserve.io`.
 
-**You do not need to wait for the transfer to complete before Stage 2–5 proceed.**
+**That is the only registrar touch, ever.** Destroying and rebuilding burst layers does not rotate the permanent-layer zone NS records, so these 8 entries stay valid forever.
+
+### If `cybserve.io` is already at Route 53
+
+Even better — in that case the NS delegation records are Terraform-manageable too. Add a small block to `dns.tf` that writes the delegation records into the existing apex hosted zone (via `data.aws_route53_zone.apex` + `aws_route53_record.app_ns` + `aws_route53_record.staging_ns`). Zero registrar clicks, 100% codified. Tell me which registrar and I'll add that block.
 
 ---
 
@@ -185,11 +188,9 @@ Note the following — you'll use them in Stage 5:
 - `route53_prod_name_servers` — you'll configure these at the parent registrar
 - `breakglass_admin_role_arn` — this is your escape hatch
 
-### 4.5 Set NS delegation (if GoDaddy transfer hasn't completed yet)
+### 4.5 Set NS delegation at the `cybserve.io` registrar
 
-At GoDaddy DNS for `cybserve.co.uk`, replace the existing `app` NS records with the 4 nameservers from `route53_prod_name_servers`. Add 4 more NS records for `app-staging` pointing at `route53_staging_name_servers`.
-
-After GoDaddy transfer completes (Stage 1), these NS records migrate to Route 53 automatically and no further action is needed.
+At whichever registrar holds `cybserve.io`, add 4 NS records for host `app` pointing at `route53_prod_name_servers`, and 4 NS records for host `app-staging` pointing at `route53_staging_name_servers`. If the parent is already on Route 53, tell me and I'll switch this step to a Terraform block instead.
 
 ### 4.6 Subscribe to CIS alarms SNS topic
 
@@ -349,7 +350,7 @@ If significantly higher, something is misconfigured — most likely GuardDuty S3
 - CloudTrail writing to a bucket that literally cannot be deleted for 1 year, not even by root
 - Security Hub + Config + GuardDuty + Inspector + Access Analyzer running, findings visible in the console right now
 - Private CA ready for internal TLS
-- Public certs for `app.cybserve.co.uk` and `app-staging.cybserve.co.uk` pre-validated and ready to attach
+- Public certs for `app.cybserve.io` and `app-staging.cybserve.io` pre-validated and ready to attach
 - AMI pointer slots in SSM, ready for Packer to fill
 - Break-glass role with MFA enforcement
 

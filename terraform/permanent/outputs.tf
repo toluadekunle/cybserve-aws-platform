@@ -110,7 +110,7 @@ output "ssm_param_staging_app_ami" {
 # Operator visibility only — Route53 NS records
 ########################################
 output "route53_prod_name_servers" {
-  description = "OPERATOR: NS records for prod zone — set these on the parent (cybserve.co.uk) registrar, one-time"
+  description = "OPERATOR: NS records for prod zone — set these on the parent (cybserve.io) registrar, one-time"
   value       = aws_route53_zone.prod.name_servers
 }
 

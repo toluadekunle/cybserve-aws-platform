@@ -9,8 +9,8 @@ This workspace manages the resources that persist between demo sessions. Everyth
 | Identity | GitHub OIDC provider, HCP Terraform OIDC provider, workspace IAM roles, permission boundary, break-glass role | Can't be ephemeral — identity is the root of trust for everything else |
 | Crypto | Customer-managed KMS keys for audit logs + cross-burst data (CloudTrail, Config, audit S3, Backup vault, Secrets Manager where cross-session, EBS default) | Rotations are slow, key deletion windows are minimum 7 days — fundamentally long-lived |
 | Audit | CloudTrail (org-trail pattern adapted to single account), Config recorder, Security Hub (CIS + AFSBP), GuardDuty (all data sources), Access Analyzer, Inspector v2 | Evidence accrues. Destroying these breaks the "any day, any time" defensibility claim. Combined cost ~£10/mo |
-| Trust stores | ACM Private CA in short-lived mode, public ACM cert for `app.cybserve.co.uk`, public ACM cert for `app-staging.cybserve.co.uk` | Private CA deletion takes 7–30 days minimum. Public cert validation is free to keep; re-validating wastes 5 min of every cold start. |
-| DNS | Route53 hosted zone for `app.cybserve.co.uk` (+ staging) | Zone recreation rotates NS records → requires manual registrar update → kills the "rebuild from zero" claim |
+| Trust stores | ACM Private CA in short-lived mode, public ACM cert for `app.cybserve.io`, public ACM cert for `app-staging.cybserve.io` | Private CA deletion takes 7–30 days minimum. Public cert validation is free to keep; re-validating wastes 5 min of every cold start. |
+| DNS | Route53 hosted zone for `app.cybserve.io` (+ staging) | Zone recreation rotates NS records → requires registrar update → kills the "rebuild from zero" claim |
 | Artifacts | S3 buckets for CloudTrail, Config history, VPC flow-log archive, ALB access logs, AWS Backup vault | Survives destroy → rebuild, so evidence and backups persist |
 | AMI pointers | SSM Parameter Store entries for `/ha-3tier/prod/web-ami-id` and `/ha-3tier/prod/app-ami-id` | Packer writes here, Terraform reads here. Decouples AMI bake cadence from platform apply cadence. |
 
